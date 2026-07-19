@@ -284,7 +284,7 @@ function useFinance(toast) {
       try {
         const [rTx, rGoals] = await Promise.all([
           supabase.from("transacoes").select("*").order("date", { ascending: false }),
-          supabase.from("metas").select("*").order("created_at"),
+          supabase.from("metas").select("*"),
         ]);
         if (rTx.error) throw rTx.error;
         if (rGoals.error) throw rGoals.error;
