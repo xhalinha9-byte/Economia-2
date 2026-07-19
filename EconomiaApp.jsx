@@ -8,7 +8,7 @@ import {
   LayoutDashboard, Wallet, TrendingUp, Target, Menu, X, ArrowUpRight,
   ArrowDownRight, Sparkles, PiggyBank, Trash2, Pencil, Search, ArrowUpDown,
   Repeat, Plus, Calendar, Check, DollarSign, Tag, FileText, CalendarDays,
-  PieChart as PieChartIcon, LogOut, Loader2,
+  PieChart as PieChartIcon, LogOut, Loader2, Receipt,
 } from "lucide-react";
 
 /* ---------------------------------------------------------------------- */
@@ -395,6 +395,7 @@ function useFinance(toast) {
 
 const TABS = [
   { id: "dashboard", label: "Painel", icon: LayoutDashboard },
+  { id: "monthly-expenses", label: "Gastos do Mês", icon: Receipt },
   { id: "transactions", label: "Movimentações", icon: Wallet },
   { id: "evolution", label: "Evolução", icon: TrendingUp },
   { id: "goals", label: "Metas", icon: Target },
@@ -657,6 +658,153 @@ function AddGoalModal({ onClose, onSubmit }) {
           </button>
         </form>
       </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------- */
+/* MonthlyExpenses (Gastos do Mês)                                         */
+/* ---------------------------------------------------------------------- */
+
+function MonthlyExpenses({ transactions, onAdd, onDelete }) {
+  const [amount, setAmount] = useState("");
+  const [category, setCategory] = useState(CATEGORIES[1]);
+  const [description, setDescription] = useState("");
+  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+  const [deletingTx, setDeletingTx] = useState(null);
+
+  const nowKey = currentMonthKey();
+  const monthLabel = `${MONTH_LABELS[new Date().getMonth()]} de ${new Date().getFullYear()}`;
+
+  const monthExpenses = useMemo(
+    () => transactions.filter((t) => t.type === "expense" && monthKey(t.date) === nowKey),
+    [transactions, nowKey]
+  );
+
+  const total = useMemo(() => monthExpenses.reduce((s, t) => s + t.amount, 0), [monthExpenses]);
+
+  const byCategory = useMemo(() => {
+    const map = {};
+    monthExpenses.forEach((t) => { map[t.category] = (map[t.category] || 0) + t.amount; });
+    return Object.entries(map).sort((a, b) => b[1] - a[1]);
+  }, [monthExpenses]);
+
+  const sorted = useMemo(() => [...monthExpenses].sort((a, b) => b.date.localeCompare(a.date)), [monthExpenses]);
+
+  function handleSubmit(e) {
+    e.preventDefault();
+    const parsed = parseFloat(String(amount).replace(",", "."));
+    if (!description || Number.isNaN(parsed) || parsed <= 0) return;
+    onAdd({ type: "expense", amount: parsed, category, description, date });
+    setAmount("");
+    setDescription("");
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Gastos do mês</h1>
+        <p className="text-muted-foreground text-sm mt-1">{monthLabel} · lance rápido, sem preencher tudo</p>
+      </div>
+
+      <div className="glass-card rounded-2xl p-6 anim-fade-up flex items-center justify-between glow-emerald">
+        <div>
+          <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Total gasto neste mês</p>
+          <p className="text-3xl font-bold font-mono text-red-400">{formatBRL(total)}</p>
+        </div>
+        <div className="w-12 h-12 rounded-xl bg-red-400/15 flex items-center justify-center text-red-400">
+          <Receipt size={22} />
+        </div>
+      </div>
+
+      <form onSubmit={handleSubmit} className="glass-card rounded-2xl p-6 anim-fade-up space-y-3">
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-1">Novo gasto</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="relative">
+            <DollarSign size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input type="text" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0,00" required
+              className="w-full pl-10 pr-4 py-3 rounded-xl bg-white/5 border border-white/10 text-foreground placeholder:text-muted-foreground focus:border-emerald-500/50 focus:outline-none transition-colors font-mono text-lg" />
+          </div>
+          <div className="relative">
+            <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
+              className="w-full pl-10 pr-4 py-3 rounded-xl bg-white/5 border border-white/10 text-foreground focus:border-emerald-500/50 focus:outline-none transition-colors" />
+          </div>
+        </div>
+        <div className="relative">
+          <FileText size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Descrição" required
+            className="w-full pl-10 pr-4 py-3 rounded-xl bg-white/5 border border-white/10 text-foreground placeholder:text-muted-foreground focus:border-emerald-500/50 focus:outline-none transition-colors" />
+        </div>
+        <div className="relative">
+          <Tag size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <select value={category} onChange={(e) => setCategory(e.target.value)}
+            className="w-full pl-10 pr-4 py-3 rounded-xl bg-white/5 border border-white/10 text-foreground focus:border-emerald-500/50 focus:outline-none transition-colors appearance-none">
+            {CATEGORIES.map((c) => <option key={c} value={c} className="bg-slate-800">{c}</option>)}
+          </select>
+        </div>
+        <button type="submit" className="w-full py-3 rounded-xl bg-emerald-500 text-slate-900 font-semibold text-sm hover:bg-emerald-400 transition-colors active:scale-95 shadow-lg shadow-emerald-500/20">
+          + Adicionar gasto
+        </button>
+      </form>
+
+      {byCategory.length > 0 && (
+        <div className="glass-card rounded-2xl p-6 anim-fade-up">
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Por categoria</h3>
+          <div className="space-y-3">
+            {byCategory.map(([cat, val]) => (
+              <div key={cat}>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-foreground">{cat}</span>
+                  <span className="font-mono text-muted-foreground">{formatBRL(val)}</span>
+                </div>
+                <div className="w-full h-1.5 rounded-full bg-white/5 overflow-hidden">
+                  <div className="h-full rounded-full transition-all duration-700" style={{ width: `${(val / total) * 100}%`, background: CATEGORY_COLORS[cat] || "#94A3B8" }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="glass-card rounded-2xl p-6 anim-fade-up">
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Lançamentos do mês</h3>
+        {sorted.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-6 text-center">Nenhum gasto lançado neste mês ainda.</p>
+        ) : (
+          <div className="space-y-2">
+            {sorted.map((t) => (
+              <div key={t.id} className="flex items-center justify-between py-3 px-4 rounded-xl hover:bg-white/[0.04] transition-colors group">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-red-400/15 text-red-400 shrink-0">
+                    <ArrowDownRight size={16} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{t.description}</p>
+                    <p className="text-xs text-muted-foreground">{t.category} · {new Date(t.date + "T00:00:00").toLocaleDateString("pt-BR")}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <span className="text-sm font-mono font-semibold text-red-400 mr-1">- {formatBRL(t.amount)}</span>
+                  <button onClick={() => setDeletingTx(t)} className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive p-1.5" aria-label="Excluir">
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {deletingTx && (
+        <ConfirmDialog
+          title="Excluir gasto?"
+          description={`"${deletingTx.description}" · ${formatBRL(deletingTx.amount)} será removido. Essa ação não pode ser desfeita.`}
+          confirmLabel="Excluir"
+          onCancel={() => setDeletingTx(null)}
+          onConfirm={() => { onDelete(deletingTx.id); setDeletingTx(null); }}
+        />
+      )}
     </div>
   );
 }
@@ -1359,6 +1507,7 @@ function EconomiaAppInterno() {
           </div>
 
           {activeTab === "dashboard" && <Dashboard transactions={data.transactions} goals={data.goals} onAddTransaction={addTransaction} onAddGoal={addGoal} />}
+          {activeTab === "monthly-expenses" && <MonthlyExpenses transactions={data.transactions} onAdd={addTransaction} onDelete={deleteTransaction} />}
           {activeTab === "transactions" && <Transactions transactions={data.transactions} onAdd={addTransaction} onUpdate={updateTransaction} onDelete={deleteTransaction} />}
           {activeTab === "evolution" && <Evolution transactions={data.transactions} />}
           {activeTab === "goals" && <Goals goals={data.goals} onAdd={addGoal} onDelete={deleteGoal} onUpdateAmount={updateGoalAmount} />}
