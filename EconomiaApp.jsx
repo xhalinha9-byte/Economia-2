@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
+import { createClient } from "@supabase/supabase-js";
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend,
@@ -7,8 +8,123 @@ import {
   LayoutDashboard, Wallet, TrendingUp, Target, Menu, X, ArrowUpRight,
   ArrowDownRight, Sparkles, PiggyBank, Trash2, Pencil, Search, ArrowUpDown,
   Repeat, Plus, Calendar, Check, DollarSign, Tag, FileText, CalendarDays,
-  PieChart as PieChartIcon,
+  PieChart as PieChartIcon, LogOut, Loader2,
 } from "lucide-react";
+
+/* ---------------------------------------------------------------------- */
+/* Conexão com o Supabase (login + banco de dados na nuvem)                */
+/* ---------------------------------------------------------------------- */
+
+const SUPABASE_URL = "https://aqktifkcmtpjjbtdrtee.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFxa3RpZmtjbXRwampidGRydGVlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMwMjkyNzUsImV4cCI6MjA5ODYwNTI3NX0.cpffdduxnJi1Q8jT8-OtDfdipfGEYCsCGqYl7Mz7qA0";
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+function transacaoToRemote(t) {
+  return {
+    type: t.type,
+    amount: t.amount,
+    category: t.category,
+    description: t.description,
+    date: t.date,
+    recurring: !!t.recurring,
+    series_id: t.seriesId || null,
+  };
+}
+function transacaoFromRemote(r) {
+  return {
+    id: r.id,
+    type: r.type,
+    amount: Number(r.amount),
+    category: r.category,
+    description: r.description,
+    date: r.date,
+    recurring: !!r.recurring,
+    seriesId: r.series_id || undefined,
+  };
+}
+function metaToRemote(g) {
+  return {
+    name: g.name,
+    target_amount: g.targetAmount,
+    current_amount: g.currentAmount ?? 0,
+    deadline: g.deadline,
+    icon: g.icon,
+  };
+}
+function metaFromRemote(r) {
+  return {
+    id: r.id,
+    name: r.name,
+    targetAmount: Number(r.target_amount),
+    currentAmount: Number(r.current_amount),
+    deadline: r.deadline,
+    icon: r.icon,
+  };
+}
+
+/* ---------------------------------------------------------------------- */
+/* Tela de login / cadastro                                                */
+/* ---------------------------------------------------------------------- */
+
+function TelaLogin() {
+  const [modo, setModo] = useState("entrar");
+  const [email, setEmail] = useState("");
+  const [senha, setSenha] = useState("");
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState("");
+  const [avisoCadastro, setAvisoCadastro] = useState("");
+
+  async function enviar(e) {
+    e.preventDefault();
+    setErro("");
+    setAvisoCadastro("");
+    if (!email.trim() || !senha) return;
+    setCarregando(true);
+    try {
+      if (modo === "entrar") {
+        const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password: senha });
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.auth.signUp({ email: email.trim(), password: senha });
+        if (error) throw error;
+        setAvisoCadastro("Conta criada! Verifique seu e-mail para confirmar antes de entrar (se a confirmação estiver ativada no projeto).");
+      }
+    } catch (err) {
+      setErro(err.message === "Invalid login credentials" ? "E-mail ou senha incorretos." : err.message);
+    } finally {
+      setCarregando(false);
+    }
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: "linear-gradient(160deg, oklch(0.10 0.025 260) 0%, oklch(0.12 0.02 250) 40%, oklch(0.14 0.025 170) 100%)" }}>
+      <form onSubmit={enviar} className="w-full max-w-sm rounded-2xl p-6 space-y-4" style={{ background: "linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 50%, rgba(16,185,129,0.02) 100%)", backdropFilter: "blur(20px) saturate(1.2)", border: "1px solid rgba(255,255,255,0.1)" }}>
+        <div className="text-center space-y-1">
+          <div className="mx-auto w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-slate-900 font-bold text-lg">E</div>
+          <h1 className="text-lg font-bold text-white">Economia App</h1>
+          <p className="text-xs text-slate-400">{modo === "entrar" ? "Entre na sua conta" : "Crie sua conta"}</p>
+        </div>
+        <div className="space-y-2">
+          <input type="email" required placeholder="E-mail" value={email} onChange={e => setEmail(e.target.value)} className="w-full border border-white/10 bg-white/5 text-white placeholder:text-slate-500 rounded-lg px-3 py-2 text-sm" />
+          <input type="password" required minLength={6} placeholder="Senha (mín. 6 caracteres)" value={senha} onChange={e => setSenha(e.target.value)} className="w-full border border-white/10 bg-white/5 text-white placeholder:text-slate-500 rounded-lg px-3 py-2 text-sm" />
+        </div>
+        {erro && <p className="text-xs text-red-400">{erro}</p>}
+        {avisoCadastro && <p className="text-xs text-emerald-400">{avisoCadastro}</p>}
+        <button type="submit" disabled={carregando} className="w-full bg-emerald-500 text-slate-900 rounded-lg py-2 text-sm font-medium disabled:opacity-60 flex items-center justify-center gap-2">
+          {carregando && <Loader2 size={14} className="animate-spin" />}
+          {modo === "entrar" ? "Entrar" : "Criar conta"}
+        </button>
+        <button
+          type="button"
+          onClick={() => { setModo(modo === "entrar" ? "cadastrar" : "entrar"); setErro(""); setAvisoCadastro(""); }}
+          className="w-full text-xs text-slate-400 pt-1"
+        >
+          {modo === "entrar" ? "Não tem conta? Criar uma" : "Já tem conta? Entrar"}
+        </button>
+      </form>
+    </div>
+  );
+}
 
 /* ---------------------------------------------------------------------- */
 /* Helpers: categories, dates, currency                                    */
@@ -157,65 +273,120 @@ function generateMissingRecurring(transactions) {
 }
 
 function useFinance(toast) {
-  const [data, setData] = useState(seedData);
+  const [data, setData] = useState({ transactions: [], goals: [] });
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const hasGeneratedRecurring = useRef(false);
 
   useEffect(() => {
-    if (hasGeneratedRecurring.current) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [rTx, rGoals] = await Promise.all([
+          supabase.from("transacoes").select("*").order("date", { ascending: false }),
+          supabase.from("metas").select("*").order("created_at"),
+        ]);
+        if (rTx.error) throw rTx.error;
+        if (rGoals.error) throw rGoals.error;
+        if (!cancelled) {
+          setData({
+            transactions: rTx.data.map(transacaoFromRemote),
+            goals: rGoals.data.map(metaFromRemote),
+          });
+        }
+      } catch (err) {
+        if (!cancelled) setLoadError("Erro ao carregar dados: " + (err?.message || JSON.stringify(err)));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (loading || hasGeneratedRecurring.current) return;
     hasGeneratedRecurring.current = true;
-    setData((prev) => {
-      const generated = generateMissingRecurring(prev.transactions);
-      if (generated.length === 0) return prev;
-      const incomeCount = generated.filter((t) => t.type === "income").length;
+    (async () => {
+      const generated = generateMissingRecurring(data.transactions);
+      if (generated.length === 0) return;
+      const { data: inserted, error } = await supabase
+        .from("transacoes")
+        .insert(generated.map(transacaoToRemote))
+        .select();
+      if (error) return;
+      const novas = inserted.map(transacaoFromRemote);
+      const incomeCount = novas.filter((t) => t.type === "income").length;
       if (incomeCount > 0) {
         toast(
           incomeCount === 1 ? "1 receita recorrente foi lançada automaticamente" : `${incomeCount} receitas recorrentes foram lançadas automaticamente`,
           "Revise em Movimentações se algo estiver diferente."
         );
       }
-      return { ...prev, transactions: [...generated, ...prev.transactions] };
-    });
+      setData((prev) => ({ ...prev, transactions: [...novas, ...prev.transactions] }));
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loading]);
 
-  const addTransaction = useCallback((tx) => {
-    const id = Date.now().toString();
-    const newTx = { ...tx, id, seriesId: tx.recurring ? tx.seriesId || id : undefined };
+  const addTransaction = useCallback(async (tx) => {
+    const { data: inserted, error } = await supabase.from("transacoes").insert(transacaoToRemote(tx)).select().single();
+    if (error) { toast("Não foi possível salvar", error.message); return; }
+    let newTx = transacaoFromRemote(inserted);
+    if (tx.recurring && !newTx.seriesId) {
+      await supabase.from("transacoes").update({ series_id: newTx.id }).eq("id", newTx.id);
+      newTx = { ...newTx, seriesId: newTx.id };
+    }
     setData((prev) => ({ ...prev, transactions: [newTx, ...prev.transactions] }));
-  }, []);
+  }, [toast]);
 
-  const updateTransaction = useCallback((id, tx) => {
+  const updateTransaction = useCallback(async (id, tx) => {
+    const seriesId = tx.recurring ? tx.seriesId || id : null;
+    const { error } = await supabase.from("transacoes").update({ ...transacaoToRemote(tx), series_id: seriesId }).eq("id", id);
+    if (error) { toast("Não foi possível salvar", error.message); return; }
     setData((prev) => ({
       ...prev,
-      transactions: prev.transactions.map((t) =>
-        t.id === id ? { ...t, ...tx, seriesId: tx.recurring ? tx.seriesId || t.seriesId || id : t.seriesId } : t
-      ),
+      transactions: prev.transactions.map((t) => (t.id === id ? { ...t, ...tx, seriesId: seriesId || undefined } : t)),
     }));
-  }, []);
+  }, [toast]);
 
-  const deleteTransaction = useCallback((id) => {
+  const deleteTransaction = useCallback(async (id) => {
+    const { error } = await supabase.from("transacoes").delete().eq("id", id);
+    if (error) { toast("Não foi possível excluir", error.message); return; }
     setData((prev) => ({ ...prev, transactions: prev.transactions.filter((t) => t.id !== id) }));
-  }, []);
+  }, [toast]);
 
-  const addGoal = useCallback((goal) => {
-    const newGoal = { ...goal, id: Date.now().toString(), currentAmount: 0 };
-    setData((prev) => ({ ...prev, goals: [...prev.goals, newGoal] }));
-  }, []);
+  const addGoal = useCallback(async (goal) => {
+    const { data: inserted, error } = await supabase.from("metas").insert(metaToRemote({ ...goal, currentAmount: 0 })).select().single();
+    if (error) { toast("Não foi possível salvar a meta", error.message); return; }
+    setData((prev) => ({ ...prev, goals: [...prev.goals, metaFromRemote(inserted)] }));
+  }, [toast]);
 
-  const deleteGoal = useCallback((id) => {
+  const deleteGoal = useCallback(async (id) => {
+    const { error } = await supabase.from("metas").delete().eq("id", id);
+    if (error) { toast("Não foi possível excluir a meta", error.message); return; }
     setData((prev) => ({ ...prev, goals: prev.goals.filter((g) => g.id !== id) }));
-  }, []);
+  }, [toast]);
 
-  const updateGoalAmount = useCallback((id, amount) => {
+  const updateGoalAmount = useCallback(async (id, amount) => {
+    const goal = data.goals.find((g) => g.id === id);
+    if (!goal) return;
+    const clamped = Math.min(Math.max(0, amount), goal.targetAmount);
+    const { error } = await supabase.from("metas").update({ current_amount: clamped }).eq("id", id);
+    if (error) { toast("Não foi possível atualizar a meta", error.message); return; }
     setData((prev) => ({
       ...prev,
-      goals: prev.goals.map((g) => (g.id === id ? { ...g, currentAmount: Math.min(Math.max(0, amount), g.targetAmount) } : g)),
+      goals: prev.goals.map((g) => (g.id === id ? { ...g, currentAmount: clamped } : g)),
     }));
+  }, [data.goals, toast]);
+
+  const clearAll = useCallback(async () => {
+    await Promise.all([
+      supabase.from("transacoes").delete().not("id", "is", null),
+      supabase.from("metas").delete().not("id", "is", null),
+    ]);
+    setData({ transactions: [], goals: [] });
   }, []);
 
-  const clearAll = useCallback(() => setData({ transactions: [], goals: [] }), []);
-
-  return { data, addTransaction, updateTransaction, deleteTransaction, addGoal, deleteGoal, updateGoalAmount, clearAll };
+  return { data, loading, loadError, addTransaction, updateTransaction, deleteTransaction, addGoal, deleteGoal, updateGoalAmount, clearAll };
 }
 
 /* ---------------------------------------------------------------------- */
@@ -1106,17 +1277,33 @@ function Evolution({ transactions }) {
 /* App shell                                                                */
 /* ---------------------------------------------------------------------- */
 
-export default function EconomiaApp() {
+function EconomiaAppInterno() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const { toasts, push: toast } = useToasts();
-  const { data, addTransaction, updateTransaction, deleteTransaction, addGoal, deleteGoal, updateGoalAmount, clearAll } = useFinance(toast);
+  const { data, loading, loadError, addTransaction, updateTransaction, deleteTransaction, addGoal, deleteGoal, updateGoalAmount, clearAll } = useFinance(toast);
 
   const handleClearAll = useCallback(() => {
     clearAll();
     setShowClearConfirm(false);
     toast("Todos os dados foram apagados", "Comece do zero agora.");
   }, [clearAll, toast]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "linear-gradient(160deg, oklch(0.10 0.025 260) 0%, oklch(0.12 0.02 250) 40%, oklch(0.14 0.025 170) 100%)" }}>
+        <Loader2 className="animate-spin text-emerald-400" size={28} />
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4 text-center" style={{ background: "linear-gradient(160deg, oklch(0.10 0.025 260) 0%, oklch(0.12 0.02 250) 40%, oklch(0.14 0.025 170) 100%)" }}>
+        <p className="text-red-400 text-sm max-w-sm">{loadError}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen relative overflow-hidden" style={{ background: "linear-gradient(160deg, oklch(0.10 0.025 260) 0%, oklch(0.12 0.02 250) 40%, oklch(0.14 0.025 170) 100%)" }}>
@@ -1162,9 +1349,12 @@ export default function EconomiaApp() {
 
       <main className="lg:ml-64 min-h-screen p-4 lg:p-8 relative z-10 text-foreground">
         <div className="max-w-6xl mx-auto">
-          <div className="flex items-center justify-end mb-2">
+          <div className="flex items-center justify-end gap-2 mb-2">
             <button onClick={() => setShowClearConfirm(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-muted-foreground hover:text-red-400 hover:bg-red-400/10 transition-all active:scale-95">
               <Trash2 size={13} />Apagar tudo
+            </button>
+            <button onClick={() => supabase.auth.signOut()} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground hover:bg-white/10 transition-all active:scale-95">
+              <LogOut size={13} />Sair
             </button>
           </div>
 
@@ -1187,4 +1377,30 @@ export default function EconomiaApp() {
       <ToastStack toasts={toasts} />
     </div>
   );
+}
+
+/* ---------------------------------------------------------------------- */
+/* Porta de entrada: mostra a tela de login ou o app, conforme a sessão    */
+/* ---------------------------------------------------------------------- */
+
+export default function EconomiaApp() {
+  const [session, setSession] = useState(undefined);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession);
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
+  if (session === undefined) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "linear-gradient(160deg, oklch(0.10 0.025 260) 0%, oklch(0.12 0.02 250) 40%, oklch(0.14 0.025 170) 100%)" }}>
+        <Loader2 className="animate-spin text-emerald-400" size={28} />
+      </div>
+    );
+  }
+  if (!session) return <TelaLogin />;
+  return <EconomiaAppInterno key={session.user.id} />;
 }
